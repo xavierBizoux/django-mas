@@ -1,0 +1,227 @@
+{% extends 'default/layout.html' %}
+
+<!--Block content goes below-->
+
+{% block content %}
+<div class="row m-3">
+    <div class="col form-group">
+        <label
+            htmlfor="originSelection"
+            class="col-form-label">
+            Select a region:
+        </label>
+        <select
+            id="originSelection"
+            class="form-select form-select-lg mb-3"
+            onchange="originHandleChange(event)">
+            <option
+                value="null"
+                disabled
+                selected>
+                ---
+            </option>
+            {% for choice in origins %}
+            <option value="{{choice}}">{{choice}}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col form-group">
+        <label
+            htmlfor="makeSelection"
+            class="col-form-label">
+            Select a brand:
+        </label>
+        <select
+            id="makeSelection"
+            class="form-select form-select-lg mb-3"
+            onchange="makeHandleChange(event)"></select>
+    </div>
+    <div class="col form-group">
+        <label
+            htmlfor="modelSelection"
+            class="col-form-label">
+            Select a model:
+        </label>
+        <select
+            id="modelSelection"
+            class="form-select form-select-lg mb-3"
+            onchange="modelHandleChange(event)"></select>
+    </div>
+</div>
+<div id="main"></div>
+<script>
+    const filters = { origin: null, make: null, model: null }
+
+    const generateOptions = async (endpoint, filters, targetElementId) => {
+        const search = new URLSearchParams(filters)
+        try {
+            const response = await fetch(`${endpoint}?${search.toString()}`)
+            if (!response.ok) {
+                throw new Error(`Response status: ${response.status}`)
+            }
+            const data = await response.json()
+            const target = document.getElementById(targetElementId)
+            const nullSelection = document.createElement('option')
+            nullSelection.value = null
+            nullSelection.text = '---'
+            target.replaceChildren(nullSelection)
+            data['values'].map((value) => {
+                const element = document.createElement('option')
+                element.value = value
+                element.text = value
+                target.add(element)
+            })
+        } catch (error) {
+            console.error(error.message)
+        }
+    }
+
+    const generateCarDetails = (data, filters, targetElementId, type) => {
+        const background = type == 'prediction' ? 'bg-warning' : 'bg-primary'
+        /* Create Card */
+        const card = document.createElement('div')
+        card.className = 'card'
+        card.id = 'carDetails'
+
+        /* Create Card Header */
+        const cardHeader = document.createElement('div')
+        cardHeader.className = `card-header ${background} text-white row m-0`
+        cardHeader.id = 'cardHeader'
+        const brand = document.createElement('h2')
+        brand.className = 'col text-uppercase'
+        brand.innerText = filters.make
+        cardHeader.append(brand)
+        const model = document.createElement('h2')
+        model.className = 'col text-end'
+        model.innerText = filters.model
+        cardHeader.append(model)
+
+        /* Create Card Body */
+        const cardBody = document.createElement('div')
+        cardBody.className = 'card-body'
+        cardBody.id = 'cardBody'
+
+        /* Create Card Footer */
+        const cardFooter = document.createElement('div')
+        cardFooter.className = `card-footer ${background} text-white font-weight-bold row m-0`
+        cardFooter.id = 'cardFooter'
+
+        for (let i = 0; i < data.columns.length; i++) {
+            if (!['Model', 'Make'].includes(data.columns[i])) {
+                const row = document.createElement('div')
+                row.className = 'row'
+                const col0 = document.createElement('div')
+                col0.className = 'col fw-bold'
+                if (type == 'prediction' && data.columns[i] == 'MSRP') {
+                    col0.innerText = `Predicted ${data.columns[i]}`
+                } else {
+                    col0.innerText = data.columns[i]
+                }
+                row.append(col0)
+                const col1 = document.createElement('div')
+                col1.className = 'col text-end'
+                if (['MSRP', 'Invoice'].includes(data.columns[i])) {
+                    col1.innerText = `$${data.rows[i].toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+                } else {
+                    col1.innerText = data.rows[i]
+                }
+                row.append(col1)
+                if (data.columns[i] == 'MSRP') {
+                    cardFooter.append(row)
+                } else {
+                    cardBody.append(row)
+                }
+            }
+        }
+        card.append(cardHeader)
+        card.append(cardBody)
+        card.append(cardFooter)
+        const col = document.createElement('div')
+        col.className = 'col-6'
+        col.append(card)
+        document.getElementById(targetElementId).append(col)
+    }
+
+    const predictPrice = async (data) => {
+        const payload = {}
+        for (let i = 0; i < data.columns.length; i++) {
+            if (
+                [
+                    'DriveTrain',
+                    'Type',
+                    'Cylinders',
+                    'EngineSize',
+                    'Horsepower',
+                    'MPG_City',
+                    'Weight',
+                    'Wheelbase',
+                ].includes(data.columns[i])
+            ) {
+                payload[data.columns[i]] = data.rows[i]
+            }
+        }
+        try {
+            const response = await fetch('api/price-prediction', { method: 'POST', body: JSON.stringify(payload) })
+            if (!response.ok) {
+                throw new Error(`Response status: ${response.status}`)
+            }
+            const scoreResult = await response.json()
+            return scoreResult['P_MSRP']
+        } catch (error) {
+            console.error(error.message)
+        }
+    }
+
+    const clearOptions = (targetElementId) => {
+        const selectElement = document.getElementById(targetElementId)
+        while (selectElement.options.length > 0) {
+            selectElement.remove(0)
+        }
+    }
+
+    const displayLoadingStatus = (targetElementId) => {
+        const loadingSelection = document.createElement('option')
+        loadingSelection.value = null
+        loadingSelection.text = 'Loading...'
+        document.getElementById(targetElementId).add(loadingSelection)
+    }
+
+    const originHandleChange = async (event) => {
+        filters.origin = event.target.value
+        filters.make = null
+        filters.model = null
+        document.getElementById('main').replaceChildren('')
+        clearOptions('makeSelection')
+        displayLoadingStatus('makeSelection')
+        clearOptions('modelSelection')
+        generateOptions('/api/make', filters, 'makeSelection')
+    }
+    const makeHandleChange = async (event) => {
+        filters.make = event.target.value
+        filters.model = null
+        document.getElementById('main').replaceChildren('')
+        clearOptions('modelSelection')
+        displayLoadingStatus('modelSelection')
+        generateOptions('/api/model', filters, 'modelSelection')
+    }
+    const modelHandleChange = async (event) => {
+        const mainDiv = document.getElementById('main')
+        mainDiv.replaceChildren('')
+        mainDiv.innerText = 'Loading ...'
+        mainDiv.className = 'text-center'
+        filters.model = event.target.value
+        const search = new URLSearchParams(filters)
+        const response = await fetch(`/api/car-details?${search.toString()}`)
+        const data = await response.json()
+        const predictionData = data
+        mainDiv.replaceChildren('')
+        mainDiv.className = 'row m-3 g-6'
+        const currentView = generateCarDetails(data, filters, 'main', 'real')
+        predictPrice(data).then((prediction) => {
+            const index = predictionData.columns.indexOf('MSRP')
+            predictionData.rows[index] = prediction
+            const predictedView = generateCarDetails(predictionData, filters, 'main', 'prediction')
+        })
+    }
+</script>
+{% endblock %}
