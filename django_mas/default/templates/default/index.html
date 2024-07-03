@@ -51,33 +51,54 @@
 <div id="main"></div>
 <script>
     const filters = { origin: null, make: null, model: null }
-
     const generateOptions = async (endpoint, filters, targetElementId) => {
+        // Create a new URLSearchParams object with the filters
         const search = new URLSearchParams(filters)
+
         try {
+            // Make a fetch request to the specified endpoint with the search parameters
             const response = await fetch(`${endpoint}?${search.toString()}`)
+
+            // Check if the response is not ok (status code other than 2xx)
             if (!response.ok) {
+                // Throw an error with the response status
                 throw new Error(`Response status: ${response.status}`)
             }
+
+            // Parse the response body as JSON
             const data = await response.json()
+
+            // Get the target element from the DOM by its ID
             const target = document.getElementById(targetElementId)
+
+            // Create a new option element with a null value and text
             const nullSelection = document.createElement('option')
             nullSelection.value = null
             nullSelection.text = '---'
+
+            // Replace all existing child elements of the target element with the null selection option
             target.replaceChildren(nullSelection)
+
+            // Map over the values in the 'values' property of the data object
             data['values'].map((value) => {
+                // Create a new option element for each value
                 const element = document.createElement('option')
                 element.value = value
                 element.text = value
+
+                // Add the option element to the target element
                 target.add(element)
             })
         } catch (error) {
+            // Log the error message to the console
             console.error(error.message)
         }
     }
 
     const generateCarDetails = (data, filters, targetElementId, type) => {
+        // Determine the background color based on the type parameter
         const background = type == 'prediction' ? 'bg-warning' : 'bg-primary'
+
         /* Create Card */
         const card = document.createElement('div')
         card.className = 'card'
@@ -87,10 +108,14 @@
         const cardHeader = document.createElement('div')
         cardHeader.className = `card-header ${background} text-white row m-0`
         cardHeader.id = 'cardHeader'
+
+        // Create the brand element
         const brand = document.createElement('h2')
         brand.className = 'col text-uppercase'
         brand.innerText = filters.make
         cardHeader.append(brand)
+
+        // Create the model element
         const model = document.createElement('h2')
         model.className = 'col text-end'
         model.innerText = filters.model
@@ -106,26 +131,38 @@
         cardFooter.className = `card-footer ${background} text-white font-weight-bold row m-0`
         cardFooter.id = 'cardFooter'
 
+        // Loop through the columns of the data object
         for (let i = 0; i < data.columns.length; i++) {
+            // Skip the 'Model' and 'Make' columns
             if (!['Model', 'Make'].includes(data.columns[i])) {
                 const row = document.createElement('div')
                 row.className = 'row'
+
+                // Create the column 0 element
                 const col0 = document.createElement('div')
                 col0.className = 'col fw-bold'
+
+                // Set the inner text based on the type and column name
                 if (type == 'prediction' && data.columns[i] == 'MSRP') {
                     col0.innerText = `Predicted ${data.columns[i]}`
                 } else {
                     col0.innerText = data.columns[i]
                 }
                 row.append(col0)
+
+                // Create the column 1 element
                 const col1 = document.createElement('div')
                 col1.className = 'col text-end'
+
+                // Set the inner text based on the column name
                 if (['MSRP', 'Invoice'].includes(data.columns[i])) {
                     col1.innerText = `$${data.rows[i].toLocaleString(undefined, { maximumFractionDigits: 2 })}`
                 } else {
                     col1.innerText = data.rows[i]
                 }
                 row.append(col1)
+
+                // Append the row to the card body or footer based on the column name
                 if (data.columns[i] == 'MSRP') {
                     cardFooter.append(row)
                 } else {
@@ -133,18 +170,27 @@
                 }
             }
         }
+
+        // Append the card header, body, and footer to the card
         card.append(cardHeader)
         card.append(cardBody)
         card.append(cardFooter)
+
+        // Create a column element and append the card to it
         const col = document.createElement('div')
         col.className = 'col-6'
         col.append(card)
+
+        // Append the column to the target element
         document.getElementById(targetElementId).append(col)
     }
-
     const predictPrice = async (data) => {
+        // Initialize an empty payload object
         const payload = {}
+
+        // Iterate over the columns of the data object
         for (let i = 0; i < data.columns.length; i++) {
+            // Check if the column is one of the specified features
             if (
                 [
                     'DriveTrain',
@@ -157,69 +203,130 @@
                     'Wheelbase',
                 ].includes(data.columns[i])
             ) {
+                // Add the column and its corresponding value to the payload object
                 payload[data.columns[i]] = data.rows[i]
             }
         }
+
         try {
+            // Make a POST request to the price-prediction API with the payload as the body
             const response = await fetch('api/price-prediction', { method: 'POST', body: JSON.stringify(payload) })
+
+            // Check if the response is not ok (status code other than 2xx)
             if (!response.ok) {
+                // Throw an error with the response status
                 throw new Error(`Response status: ${response.status}`)
             }
+
+            // Parse the response body as JSON
             const scoreResult = await response.json()
+
+            // Return the predicted MSRP value from the response
             return scoreResult['P_MSRP']
         } catch (error) {
+            // Log the error message to the console
             console.error(error.message)
         }
     }
-
     const clearOptions = (targetElementId) => {
+        // Get the select element from the DOM by its ID
         const selectElement = document.getElementById(targetElementId)
+
+        // Remove all options from the select element
         while (selectElement.options.length > 0) {
             selectElement.remove(0)
         }
     }
-
     const displayLoadingStatus = (targetElementId) => {
+        // Create a new option element
         const loadingSelection = document.createElement('option')
+
+        // Set the value of the option to null
         loadingSelection.value = null
+
+        // Set the text of the option to 'Loading...'
         loadingSelection.text = 'Loading...'
+
+        // Add the option to the select element with the specified ID
         document.getElementById(targetElementId).add(loadingSelection)
     }
 
     const originHandleChange = async (event) => {
+        // Update the origin filter with the new value from the event
         filters.origin = event.target.value
+
+        // Reset the make and model filters
         filters.make = null
         filters.model = null
+
+        // Clear the content of the 'main' element
         document.getElementById('main').replaceChildren('')
+
+        // Clear and display a loading status in the 'makeSelection' element
         clearOptions('makeSelection')
         displayLoadingStatus('makeSelection')
+
+        // Clear the options in the 'modelSelection' element
         clearOptions('modelSelection')
+
+        // Generate options for the 'makeSelection' element based on the origin filter
         generateOptions('/api/make', filters, 'makeSelection')
     }
     const makeHandleChange = async (event) => {
+        // Update the make filter with the new value from the event
         filters.make = event.target.value
+
+        // Reset the model filter
         filters.model = null
+
+        // Clear the content of the 'main' element
         document.getElementById('main').replaceChildren('')
+
+        // Clear and display a loading status in the 'modelSelection' element
         clearOptions('modelSelection')
         displayLoadingStatus('modelSelection')
+
+        // Generate options for the 'modelSelection' element based on the make filter
         generateOptions('/api/model', filters, 'modelSelection')
     }
     const modelHandleChange = async (event) => {
+        // Get the main div element
         const mainDiv = document.getElementById('main')
+
+        // Clear the content of the main div and display a loading message
         mainDiv.replaceChildren('')
         mainDiv.innerText = 'Loading ...'
         mainDiv.className = 'text-center'
+
+        // Update the model filter with the new value from the event
         filters.model = event.target.value
+
+        // Create a URLSearchParams object from the filters object
         const search = new URLSearchParams(filters)
+
+        // Make a fetch request to the API with the search parameters
         const response = await fetch(`/api/car-details?${search.toString()}`)
+
+        // Parse the response body as JSON
         const data = await response.json()
+
+        // Store the data in the predictionData variable
         const predictionData = data
+
+        // Clear the content of the main div and set the class name
         mainDiv.replaceChildren('')
         mainDiv.className = 'row m-3 g-6'
+
+        // Generate the car details view for the real data
         const currentView = generateCarDetails(data, filters, 'main', 'real')
+
+        // Predict the price of the car using the predictPrice function
         predictPrice(data).then((prediction) => {
+            // Update the MSRP value in the predictionData object with the predicted value
             const index = predictionData.columns.indexOf('MSRP')
             predictionData.rows[index] = prediction
+
+            // Generate the car details view for the predicted data
             const predictedView = generateCarDetails(predictionData, filters, 'main', 'prediction')
         })
     }
